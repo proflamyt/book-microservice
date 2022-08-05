@@ -1,15 +1,18 @@
 import { HttpException,  Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios'
-import { catchError, map } from 'rxjs';
+import { catchError, concat, forkJoin, iif, map , Observable, of} from 'rxjs';
+import {combineLatest, combineLatestAll, mergeMap, switchMap, tap } from 'rxjs/operators';
 import { Books } from './interfaces/book.interface';
 import { Character } from './interfaces/character.interfaces';
 
 @Injectable()
 export class BookService {
-    constructor(private readonly http: HttpService) {}
+    private characters: string[] = [];
+    constructor(
+        private readonly http: HttpService) {}
 
     // listing the names of books along with their authors and comment count,
-
+    
     async listBooks() {
 
         return this.callUrl("https://anapioficeandfire.com/api/books")
@@ -19,34 +22,89 @@ export class BookService {
                 map((data) => {
                     return data.map(this.mapBooks);
                   }),
-                  catchError((e) => {
-                    throw new HttpException(e.response.data, e.response.status);
-                }),
-            )
+                map((data)=> {
+                    return data.map(this.fetchCommentNum)
+                }
+                ),
+            ).toPromise();
     }
 
-    async listCharacter(data: { id: any; }) {
+     listCharacter(data: { id: any; }) {
         return this.callUrl(`https://anapioficeandfire.com/api/books/${data.id}`)
             .pipe(
                 map(
+                    (resp) => { 
+                       // this.characters.push(...resp.characters);
+                       
+                    return resp.characters
+                    // [
+                    //     url,url
+                    // ]
+                }),
+                map (
                     (data) => {
-                        return this.mapCharacters(data);
-                    }
-                ),
-                catchError((e) => {
-                  throw new HttpException(e.response.data, e.response.status);
-              }),
+                        return data.map(url => this.callUrl(url));
+                    }),
+                
+                map(function (data) {
+                    var characters = [];
+                    
+                   data.map(function (item) {
+                         item.subscribe(
+                            function (ola: any) {
+                           return characters.push(ola.name)   
+                        }
+
+                        );
+
+
+                      });
+                            
+                    return characters;
+
+                      // console.log(this.characters)
+                     
+                
+                }),
+                    // return iif(() => data !== null, this.callUrl(data), of(this.characters));
+                 
+                // tap(data => console.log(data)),
+                // map((data) => {
+
+                //    return this.http.get('https://anapioficeandfire.com/api/characters/1303').pipe(
+                //         // tap(data => console.log(data)),
+                //          map((response) => {
+                //           console.log(response)
+                //              return response.data
+             
+                //          } ),
+                //          catchError((e) => {
+                //              throw new HttpException(e.response.data, e.response.status);
+                //          }),
+                //          )
+                //     //this.characters.forEach(this.callUrl)
+                     
+                //   }),
+                // map((data) => {
+                //     return data
+
+                // }),
+                // tap(data => console.log(data)),
+                
             )
 
     }
 
     private callUrl(url: string) {
+        // console.log(url)
         return this.http.get(url)
             .pipe(
-            map((response) =>  response.data),
-            catchError((e) => {
-                throw new HttpException(e.response.data, e.response.status);
-            }),
+           // tap(data => console.log(data)),
+            map((response) => {
+            //    console.log(response)
+                return response.data
+
+            })
             );
         
         
@@ -54,21 +112,22 @@ export class BookService {
 
     private mapBooks(data: { name: string; authors: []; }): Books {
         // fetch numbers of comment
-        let count = this.fetchCommentNum(data.name)
+       
         return {
             name : data.name,
             authors : data.authors,
-            count : count
+            
         }
         
     }
-    private fetchCommentNum(name: string) {
-        return 1
+    private fetchCommentNum(data) {
+
+        return {...data, count:data.name} 
     }
 
-    private mapCharacters(data): Character {
+    private mapCharacters(data){
         return {
-            character : data.characters
+            name : data.name
         }
     }
 
