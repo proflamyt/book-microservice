@@ -1,14 +1,15 @@
-import { HttpException,  Injectable } from '@nestjs/common';
+import { HttpException,  Inject,  Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios'
 import { catchError, concat, forkJoin, iif, map , Observable, of} from 'rxjs';
 import {combineLatest, combineLatestAll, mergeMap, switchMap, tap } from 'rxjs/operators';
 import { Books } from './interfaces/book.interface';
 import { Character } from './interfaces/character.interfaces';
+import { ClientProxy } from '@nestjs/microservices';
 
 @Injectable()
 export class BookService {
-    private characters: string[] = [];
-    constructor(
+    // private characters: string[] = [];
+    constructor( @Inject('COMMENTS_SERVICE') private readonly clientOla: ClientProxy,
         private readonly http: HttpService) {}
 
     // listing the names of books along with their authors and comment count,
@@ -26,7 +27,7 @@ export class BookService {
                     return data.map(this.fetchCommentNum)
                 }
                 ),
-            ).toPromise();
+            );
     }
 
      listCharacter(data: { id: any; }) {
@@ -121,8 +122,14 @@ export class BookService {
         
     }
     private fetchCommentNum(data) {
-
-        return {...data, count:data.name} 
+        const pattern = {cmd : 'get_numbers_of_comments'};
+        const payload = {name: data.name};
+        let count = this.clientOla
+      .send<string>(pattern, payload)
+      .pipe(
+        map((message: string) => ({ message }))
+      );
+        return {...data, count:count} 
     }
 
     private mapCharacters(data){
